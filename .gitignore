@@ -1,0 +1,30 @@
+# Notas privadas de planejamento (não versionar)
+_privado/
+
+# Arquivos de ferramentas de IA (não versionar)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+.cursor/
+.copilot/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv*/
+.ipynb_checkpoints/
+
+# Simulador fica fora do repositório
+Meshtasticator/
+
+# Saídas brutas e pesadas das simulações
+resultados/brutos/
+out/
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini

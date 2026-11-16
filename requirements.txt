@@ -1,0 +1,8 @@
+numpy
+pandas
+scipy
+matplotlib
+networkx
+pulp>=2.8,<4
+highspy
+pyyaml
