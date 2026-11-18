@@ -34,3 +34,6 @@ desktop.ini
 
 # Arquivos temporários do Office
 ~$*
+
+# Apresentação em PowerPoint (fica fora do repositório)
+*.pptx
