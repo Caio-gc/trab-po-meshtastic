@@ -23,7 +23,7 @@ Trabalho final de Pesquisa Operacional (UFF).
 | `src/modelos.py` | regra do grau, aleatório, PLI (PuLP + HiGHS, cortes de limite de saltos) e GRASP |
 | `src/simular.py` | roda uma configuração de papéis no Meshtasticator (nós parados, queda de nós) |
 | `src/experimentos.py` | fase `otimizar` e fase `simular` (paralela e retomável) |
-| `src/analise.py` | tabelas e figuras |
+| `src/analise.py` | tabelas (inclusive comparações por cenário, violações do limite, margem e ablação) e figuras |
 | `src/exportar_yaml.py` | grava uma configuração no formato do simulador, para abrir na interface gráfica |
 
 O simulador e o ambiente Python ficam fora do repositório, numa pasta de trabalho escolhida na instalação.
@@ -48,6 +48,8 @@ python src\grafo.py                      # teste: resumo de alguns grafos
 python src\modelos.py                    # teste: PLI x GRASP em três cenários
 python src\experimentos.py otimizar      # cenários + soluções (cerca de 20 min)
 python src\experimentos.py simular       # 1.800 simulações (cerca de 1 h com 4 núcleos)
+python src\experimentos.py margem        # teste de sensibilidade: margem de 5 dB na cobertura
+python src\experimentos.py camadas       # ablação das desigualdades por camadas na PLI
 python src\analise.py                    # tabelas e figuras em resultados\
 ```
 

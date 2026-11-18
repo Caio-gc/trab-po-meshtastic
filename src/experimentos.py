@@ -10,6 +10,11 @@
       >= 5 dB (a margem recomendada pelo artigo-base), sem queda de nós.
       Grava resultados/margem.csv.
 
+  python src/experimentos.py camadas [--processos 2]
+      Ablação: resolve CDS-H e CDS-2H por PLI com e sem as desigualdades
+      "por camadas" e compara tempo e rodadas de cortes.
+      Grava resultados/camadas.csv.
+
   python src/experimentos.py simular [--processos 2] [--parte 1/2]
       Simula todas as combinações (cenário x configuração x queda x semente)
       e acrescenta uma linha por rodada em resultados/brutos/simulacoes_*.csv.
@@ -281,9 +286,35 @@ def margem(processos):
     print("Gravado:", arq)
 
 
+def _rodar_camadas(tarefa):
+    n, cen, pos, nome, k, com = tarefa
+    G = grafo.grafo_alcance(pos)
+    p = modelos.pli(G, k, saltos=SALTOS, limite_s=LIMITE_PLI_S, camadas=com)
+    return {"n": n, "cenario": cen, "variante": nome, "camadas": com, "valor": p["valor"],
+            "otimo": p["otimo"], "tempo_s": round(p["tempo_s"], 2), "rodadas": p["rodadas"], "cortes": p["cortes"]}
+
+
+def ablacao_camadas(processos):
+    with open(ARQ_SOLUCOES, encoding="utf-8") as f:
+        solucoes = json.load(f)
+    tarefas_c = [(s["n"], s["cenario"], s["posicoes"], nome, VARIANTES[nome][0], com)
+                 for s in solucoes for nome in ("CDS-H", "CDS-2H") for com in (True, False)]
+    linhas = []
+    with Pool(processos, initializer=sim_base.carregar) as pool:
+        for linha in pool.imap_unordered(_rodar_camadas, tarefas_c):
+            print(linha, flush=True)
+            linhas.append(linha)
+    arq = os.path.join(REPO, "resultados", "camadas.csv")
+    with open(arq, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=list(linhas[0]))
+        w.writeheader()
+        w.writerows(sorted(linhas, key=lambda r: (r["n"], r["cenario"], r["variante"], not r["camadas"])))
+    print("Gravado:", arq)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("fase", choices=["otimizar", "simular", "margem"])
+    ap.add_argument("fase", choices=["otimizar", "simular", "margem", "camadas"])
     ap.add_argument("--processos", type=int, default=os.cpu_count())
     ap.add_argument("--parte", default="1/1", help="fatia i/k das rodadas (padrão 1/1 = todas)")
     a = ap.parse_args()
@@ -292,6 +323,8 @@ if __name__ == "__main__":
         otimizar()
     elif a.fase == "margem":
         margem(a.processos)
+    elif a.fase == "camadas":
+        ablacao_camadas(a.processos)
     else:
         i, k = (int(x) for x in a.parte.split("/"))
         simular_tudo(a.processos, (i, k))

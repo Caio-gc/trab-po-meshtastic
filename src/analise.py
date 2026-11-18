@@ -77,7 +77,8 @@ def tabela_otimizacao():
                 "PLI ótima": f"{int(g['pli_otimo'].sum())}/{len(g)}",
                 "PLI tempo médio (s)": g["pli_tempo_s"].mean(),
                 "PLI tempo máx. (s)": g["pli_tempo_s"].max(),
-                "GRASP = ótimo": f"{int((g['grasp_valor'] == g['usado']).sum())}/{len(g)}",
+                # compara com o ótimo provado pela PLI (vazio se a PLI não provou)
+                "GRASP = ótimo": f"{int((g['grasp_valor'] == g['pli_valor']).sum())}/{int(g['pli_otimo'].sum())}",
                 "GRASP tempo médio (s)": g["grasp_tempo_s"].mean(),
             })
         linhas.append(linha)
@@ -243,6 +244,91 @@ def figura_mapa(n, cenario):
     plt.close(fig)
 
 
+# ----------------------------------------------------------------------------
+# Comparações por cenário, violação do limite, margem e ablação
+# ----------------------------------------------------------------------------
+
+COMPARACOES = [  # (configuração A, configuração B): diferença de alcance A - B
+    ("CDS-H/client", "padrao"), ("CDS/client", "padrao"), ("MOC-CDS/mute", "padrao"),
+    ("CDS-H/mute", "padrao"), ("CDS-H/mute", "CDS/mute"), ("CDS-2H/mute", "CDS-H/mute"),
+]
+
+
+def tabela_comparacoes(d):
+    """Diferença de alcance (p.p.) entre duas configurações, sem queda de nós.
+
+    A unidade independente é o CENÁRIO (rede): as duas sementes de um cenário
+    usam a mesma rede e a mesma solução, então primeiro tiramos a média das
+    sementes. Relata a diferença média, a menor e a maior entre os 5 cenários
+    e em quantos cenários A foi melhor. Com 5 cenários, um teste de Wilcoxon
+    não chegaria a 5% de significância (o menor p bilateral é 0,0625); por
+    isso a comparação é apresentada como descritiva.
+    """
+    s = d[d["queda"] == "nenhuma"].groupby(["n", "cenario", "config"])["alcance"].mean().mul(100).unstack("config")
+    linhas = []
+    for a, b in COMPARACOES:
+        linha = {"comparação": f"{nome_config(a)} vs. {nome_config(b)}"}
+        for n in sorted(s.index.get_level_values("n").unique()):
+            dif = (s.loc[n][a] - s.loc[n][b]).round(6)
+            linha[f"{n} nós"] = (f"{dif.mean():+.1f} ({dif.min():+.1f} a {dif.max():+.1f}); "
+                                 f"melhor em {int((dif > 0).sum())}/{len(dif)}")
+        linhas.append(linha)
+    t = pd.DataFrame(linhas)
+    t.to_csv(os.path.join(RES, "tabela_comparacoes.csv"), index=False)
+    _md(t, os.path.join(RES, "tabela_comparacoes.md"))
+    return t
+
+
+def tabela_violacoes(d):
+    """Por cenário: o CDS devolvido viola o limite de saltos? O CDS-H precisou
+    de mais roteadores? E a diferença de alcance CDS-H/mute - CDS/mute."""
+    o = pd.read_csv(os.path.join(RES, "otimizacao.csv")).set_index(["n", "cenario", "variante"])
+    s = d[d["queda"] == "nenhuma"].groupby(["n", "cenario", "config"])["alcance"].mean().mul(100).unstack("config")
+    linhas = []
+    for (n, c) in s.index:
+        linhas.append({
+            "n": n, "cenario": c,
+            "CDS: roteadores": int(o.loc[(n, c, "CDS"), "usado"]),
+            "CDS: enlaces máx.": int(o.loc[(n, c, "CDS"), "saltos_max"]),
+            "CDS-H: roteadores": int(o.loc[(n, c, "CDS-H"), "usado"]),
+            "alcance CDS-H/mute - CDS/mute (p.p.)": s.loc[(n, c), "CDS-H/mute"] - s.loc[(n, c), "CDS/mute"],
+        })
+    t = pd.DataFrame(linhas)
+    t.to_csv(os.path.join(RES, "tabela_violacoes.csv"), index=False)
+    _md(t, os.path.join(RES, "tabela_violacoes.md"), casas=1)
+    return t
+
+
+def tabela_margem(d):
+    """Teste de sensibilidade: CDS-H com margem de 5 dB (margem.csv) vs CDS-H."""
+    m = pd.read_csv(os.path.join(RES, "margem.csv"))
+    base = d[(d["queda"] == "nenhuma") & d["config"].isin(["CDS-H/mute", "CDS-H/client"])]
+    linhas = []
+    for modo in ("mute", "client"):
+        for n in sorted(m["n"].unique()):
+            x = m[(m["n"] == n) & (m["config"] == f"CDS-H5/{modo}")].groupby("cenario")
+            y = base[(base["n"] == n) & (base["config"] == f"CDS-H/{modo}")].groupby("cenario")
+            dif = 100 * (x["alcance"].mean() - y["alcance"].mean())
+            linhas.append({"modo": modo, "n": n, "roteadores CDS-H5": x["roteadores"].mean().mean(),
+                           "roteadores CDS-H": y["roteadores"].mean().mean(),
+                           "dif. alcance (p.p.)": dif.mean(), "melhor em": f"{int((dif > 0).sum())}/{len(dif)}"})
+    t = pd.DataFrame(linhas)
+    t.to_csv(os.path.join(RES, "tabela_margem.csv"), index=False)
+    _md(t, os.path.join(RES, "tabela_margem.md"))
+    return t
+
+
+def tabela_camadas():
+    """Ablação das desigualdades por camadas (camadas.csv)."""
+    c = pd.read_csv(os.path.join(RES, "camadas.csv"))
+    t = c.groupby(["n", "variante", "camadas"]).agg(
+        otimo=("otimo", "sum"), tempo_medio=("tempo_s", "mean"), tempo_max=("tempo_s", "max"),
+        rodadas_media=("rodadas", "mean")).reset_index()
+    t.to_csv(os.path.join(RES, "tabela_camadas.csv"), index=False)
+    _md(t, os.path.join(RES, "tabela_camadas.md"))
+    return t
+
+
 if __name__ == "__main__":
     t = tabela_otimizacao()
     figura_roteadores(t)
@@ -254,10 +340,16 @@ if __name__ == "__main__":
     else:
         print(tabela_desempenho(d).to_string(index=False))
         print(tabela_resiliencia(d).to_string(index=False))
+        print(tabela_comparacoes(d).to_string(index=False))
+        print(tabela_violacoes(d).to_string(index=False))
+        if os.path.exists(os.path.join(RES, "margem.csv")):
+            print(tabela_margem(d).to_string(index=False))
         for n in sorted(d["n"].unique()):
             figura_compromisso(d, n)
         figura_resiliencia(d, ["padrao", "CDS/mute", "CDS-H/mute", "CDS-2H/mute", "MOC-CDS/mute"])
     with open(os.path.join(REPO, "cenarios", "solucoes.json"), encoding="utf-8") as f:
         primeiro60 = next(s for s in json.load(f) if s["n"] == 60)
     figura_mapa(60, primeiro60["cenario"])
+    if os.path.exists(os.path.join(RES, "camadas.csv")):
+        print(tabela_camadas().to_string(index=False))
     print("Tabelas e figuras gravadas em", RES)

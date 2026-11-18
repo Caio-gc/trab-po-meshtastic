@@ -203,7 +203,7 @@ def _resolvedor(limite_s):
     raise RuntimeError("Nenhum resolvedor de PLI encontrado (instale highspy).")
 
 
-def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0):
+def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0, camadas=True):
     """Resolve o conjunto k-dominante conectado mínimo por PLI.
 
     Variáveis:
@@ -232,7 +232,12 @@ def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0):
     Para reduzir as rodadas, entram desde o início desigualdades válidas para
     os pares a exatamente H saltos no grafo: qualquer caminho de até H enlaces
     entre eles é um caminho mínimo, então para cada posição i = 1..H-1 algum
-    nó w com d(u, w) = i e d(w, v) = H - i precisa ser roteador.
+    nó w com d(u, w) = i e d(w, v) = H - i precisa ser roteador
+    (camadas=False desliga essas desigualdades, para medir o efeito delas).
+
+    Otimalidade: usa o status da SOLUÇÃO (sol_status), não o do problema.
+    No PuLP, o status do problema pode ser "Optimal" mesmo quando o HiGHS
+    para por limite de tempo com uma solução apenas viável.
 
     Devolve um dicionário com R, status, valor, limitante inferior e tempo.
     """
@@ -274,7 +279,7 @@ def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0):
     t0 = time.perf_counter()
     dist = dict(nx.all_pairs_shortest_path_length(G)) if saltos else None
     rodadas, cortes = 0, 0
-    if saltos:
+    if saltos and camadas:
         for u in V:
             for v in V:
                 if u < v and dist[u][v] == saltos:
@@ -287,7 +292,7 @@ def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0):
         m.solve(_resolvedor(restante))
         rodadas += 1
         R = {v for v in V if x[v].value() is not None and x[v].value() > 0.5}
-        if not saltos or pulp.LpStatus[m.status] != "Optimal":
+        if not saltos or m.sol_status != pulp.LpSolutionOptimal:
             break
         violados = pares_violados(G, R, saltos)
         if not violados or time.perf_counter() - t0 > limite_s:
@@ -308,7 +313,7 @@ def pli(G, k=1, rota=False, saltos=None, limite_s=300, margem=0.0):
     return {
         "R": R,
         "status": pulp.LpStatus[m.status],
-        "otimo": (pulp.LpStatus[m.status] == "Optimal" and tempo < limite_s
+        "otimo": (m.sol_status == pulp.LpSolutionOptimal and tempo < limite_s
                   and e_viavel(G, R, k, rota, saltos=saltos, margem=margem)),
         "rodadas": rodadas,
         "cortes": cortes,

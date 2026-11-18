@@ -28,3 +28,9 @@ out/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Vídeo da apresentação (grande demais para o GitHub, que recusa arquivos acima de 100 MB)
+*.mp4
+
+# Arquivos temporários do Office
+~$*
